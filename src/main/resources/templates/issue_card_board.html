@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Board</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js" integrity="sha256-oP6HI9z1XaZNBrJURtCoUT5SUnxFr8s3BzRl+cbzUq8=" crossorigin="anonymous"></script>
+</head>
+<body>
+    <script th:inline="javascript" th:if="${not #strings.isEmpty(errorMessage)}">
+        window.onload = function(){
+            var errorMessageDiv = document.getElementById("error-message");
+            console.log(errorMessageDiv);
+            setTimeout(function() {
+                errorMessageDiv.style.display = "none";
+            }, 3000);
+        };
+    </script>
+    <script th:inline="javascript" th:if="${#strings.equals(board.type, 'SPRINT') and not boardActive}">
+        $(document).ready(()=>{
+            $("#boardSection button").each( (index, b) => $(b).addClass("disabled"));
+        });
+    </script>
+    <div th:replace="~{/header :: header}"></div>
+    <div class="row text-center my-5 ">
+        <div class="col">
+            <h1 th:text="${board.name}"></h1>
+        </div>
+        <div class="alert alert-danger text-center" id="error-message" th:if="${not #strings.isEmpty(errorMessage)}" th:text="${errorMessage}"/>
+        <div class="alert alert-danger text-center" id="sprint-board-inactive-status" th:if="${#strings.equals(board.type, 'SPRINT') and not boardActive}" th:text="${boardStatusMessage}"/>
+        <div class="alert alert-success text-center" id="sprint-board-active-status" th:if="${#strings.equals(board.type, 'SPRINT') and boardActive}" th:text="${boardStatusMessage}"/>
+    </div>
+    <div class="row my-5 mx-5" id="boardSection">
+        <div th:each="column, i : ${board.columns}" class="col">
+            <h4 class="text-center" th:text="${column.status}" th:if="${(not #strings.equals(board.type, 'KANBAN')) or i.index==0 }"/>
+            <h4 class="text-center" th:text="${column.status + '(' + columnCardCount[column.status] +'/' + column.cardsLimit + ')'}" th:if="${#strings.equals(board.type, 'KANBAN') and i.index!=0}" />
+            <div id="board-cards">
+                <div th:each="card: ${board.cards}" th:if="${#strings.equals(card.status, column.status)}" class="my-2">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title" th:text="${card.title}" />
+                            <p class="card-text" th:text="${card.description}" />
+                            <button class="btn btn-primary" data-bs-toggle="modal" th:attr="data-bs-target='#editCardModal'+${card.id}">View</button>
+                            <button class="btn btn-info" data-bs-toggle="modal" th:attr="data-bs-target='#commentModal'+${card.id}">Comment</button>
+                            <a th:href="@{/boards/} +${board.id} + @{/card/delete/} + ${card.id}" class="btn btn-danger" th:if="${column.status == board.columns[#lists.size(board.columns)-1].status}">Delete</a>
+                        </div>
+                    </div>
+                    <div class="modal fade" th:id="'editCardModal'+${card.id}" tabindex="-1" aria-labelledby="editCardModelLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h1 class="modal-title fs-5" id="editCardModelLabel">Viewing Card</h1>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <form method="POST" th:action="@{/boards/} +${board.id} + @{/card/edit/} + ${card.id}">
+                                        <div class="mb-1">
+                                            <label for="edit-card-title" class="form-label">Card Title</label>
+                                            <input type="text" class="form-control" id="edit-card-title" name="card-title" th:value="${card.title}">
+                                        </div>
+                                        <div class="mb-1">
+                                            <label for="edit-card-description" class="form-label">Card Description</label>
+                                            <textarea class="form-control" id="edit-card-description" name="card-description" rows="3" th:text="${card.description}"></textarea>
+                                        </div>
+                                        <div class="mb-1">
+                                            <label for="edit-assigned-user" class="form-label">Assigned User</label>
+                                            <select class="form-select" aria-label="Selecting assigned user" id="edit-assigned-user" name="assigned-user">
+                                                <option selected>Select a user</option>
+                                                    <option th:each="user: ${availableUsers}" th:value="${user.id}" th:text="${user.firstName +' '+ user.lastName}" th:selected="${user.id == card.assignedTo.id}" />
+                                            </select>
+                                        </div>
+                                        <div class="mb-1">
+                                            <label for="edit-card-priority" class="form-label">Priority</label>
+                                            <select class="form-select" aria-label="Selecting card priority" id="edit-card-priority" name="card-priority">
+                                                <option th:each="i: ${#numbers.sequence(1, 5)}" th:value="'P'+${i}" th:text="'P' + ${i}" th:selected="${card.priority == 'P'+i}"/>
+
+                                            </select>
+                                        </div>
+                                        <div class="mb-1">
+                                            <label for="edit-card-severity" class="form-label">Severity</label>
+                                            <select class="form-select" aria-label="Selecting card severity" id="edit-card-severity" name="card-severity">
+                                                <option th:each="i: ${#numbers.sequence(1, 5)}" th:value="'S'+${i}" th:text="'S' + ${i}" th:selected="${card.severity == 'S'+i}"/>
+                                            </select>
+                                        </div>
+                                        <div class="mb-1">
+                                            <label for="edit-card-status" class="form-label">Status</label>
+                                            <select class="form-select" aria-label="Selecting card status" id="edit-card-status" name="card-status">
+                                                <option th:each="columnTemp: ${board.columns}" th:value="${columnTemp.status}" th:text="${columnTemp.status}" th:selected="${columnTemp.status == card.status}"/>
+                                            </select>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary">
+                                            Edit card
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal fade" th:id="'commentModal'+${card.id}" tabindex="-1" aria-labelledby="commentOnCardModelLabel" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h1 class="modal-title fs-5" id="commentModelLabel">Create new card</h1>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="comment-main-section" th:each="comment, index: ${card.comments}">
+                                        <div class="d-flex flex-start">
+                                            <img class="rounded-circle shadow-1-strong me-3"
+                                                 src="https://i.stack.imgur.com/l60Hf.png" alt="avatar" width="60"
+                                                 height="60" />
+                                            <div>
+                                                <h6 class="fw-bold mb-1" th:text="${comment.commentedUser.firstName + ' ' + comment.commentedUser.lastName} "/>
+                                                <div class="d-flex align-items-center mb-3">
+                                                    <p class="mb-0" th:text="${#temporals.format(comment.timePosted, 'd MMM, yyyy h:mm a')}"/>
+                                                </div>
+                                                <p class="mb-0" th:text="${comment.text}"/>
+                                            </div>
+                                        </div>
+                                        <hr class="my-3" th:if="${index != #lists.size(card.comments)-1}"/>
+                                    </div>
+                                    <div class="add-comment-section my-4">
+                                        <form th:action="@{/boards/} + ${board.id} + @{/card/} +${card.id} + @{/comment/add}" method="post">
+                                            <div class="d-flex flex-start">
+                                                <img class="rounded-circle shadow-1-strong me-3"
+                                                     src="https://i.stack.imgur.com/l60Hf.png" alt="avatar" width="60"
+                                                     height="60" />
+                                                <textarea class="form-control" id="commentText" name="commentText" rows="3" placeholder="Comment"></textarea>
+                                            </div>
+                                            <div class="float-end mt-2 pt-1">
+                                                <button type="submit" class="btn btn-primary btn-sm">Post comment</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button th:if="${column.id == board.columns[0].id}" class="btn btn-success my-3" data-bs-toggle="modal" data-bs-target="#addCardModal">Add card</button>
+        </div>
+    </div>
+    <!-- Modal -->
+    <div class="modal fade" id="addCardModal" tabindex="-1" aria-labelledby="addCardModelLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h1 class="modal-title fs-5" id="addCardModelLabel">Create new card</h1>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form method="POST" th:action="@{/boards/} +${board.id} + @{/card/add}">
+                        <div class="mb-1">
+                            <label for="card-title" class="form-label">Card Title</label>
+                            <input type="text" class="form-control" id="card-title" name="card-title">
+                        </div>
+                        <div class="mb-1">
+                            <label for="card-description" class="form-label">Card Description</label>
+                            <textarea class="form-control" id="card-description" name="card-description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-1">
+                            <label for="assigned-user" class="form-label">Assigned User</label>
+                            <select class="form-select" aria-label="Selecting assigned user" id="assigned-user" name="assigned-user">
+                                <option selected>Select a user</option>
+                                <option th:each="user: ${board.team.users}" th:value="${user.id}" th:text="${user.firstName +' '+ user.lastName}"/>
+                            </select>
+                        </div>
+                        <div class="mb-1">
+                            <label for="card-priority" class="form-label">Priority</label>
+                            <select class="form-select" aria-label="Selecting card priority" id="card-priority" name="card-priority">
+                                <option selected>Select a priority</option>
+                                <option th:each="i: ${#numbers.sequence(1, 5)}" th:value="'P'+${i}" th:text="'P' + ${i}" />
+
+                            </select>
+                        </div>
+                        <div class="mb-1">
+                            <label for="card-severity" class="form-label">Severity</label>
+                            <select class="form-select" aria-label="Selecting card severity" id="card-severity" name="card-severity">
+                                <option selected>Select a severity</option>
+                                <option th:each="i: ${#numbers.sequence(1, 5)}" th:value="'S'+${i}" th:text="'S' + ${i}" />
+
+                            </select>
+                        </div>
+                        <input type="hidden" name="card-status" th:value="${board.columns[0].status}" />
+                        <button type="submit" class="btn btn-primary">
+                            Create card
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
